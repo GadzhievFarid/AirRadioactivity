@@ -1,0 +1,97 @@
+---
+title: Анализ влияния аварии на АЭС Фукусима-1 на содержание радиоактивных веществ
+  в воздухе Канады.
+author: "Гаджиев Фарид"
+params:
+  filename: http://www.hc-sc.gc.ca/data-donnees/hecs-dgsesc/nms_airborne_radioactivity_ssn_radioactivite_dans_air.csv
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+library(ggthemes)
+library(scales)
+options(dplyr.width = Inf)
+```
+## Введение.
+
+  Было проведено исследование данных количества радиоактивных нуклидов в воздухе Канады. Данные, использованные в исследовании, были взяты с [сайта Канадского правительства](http://open.canada.ca/)[^1]. 
+
+[^1]: [Прямая ссылка на данные](http://www.hc-sc.gc.ca/data-donnees/hecs-dgsesc/nms_airborne_radioactivity_ssn_radioactivite_dans_air.csv)
+
+  Представленные данные содержат информацию о концентрации, степени неопределенности и минимальную обнаруживаемую концентрацию для следующих радиоактивных нуклидов: Бериллий-7 (Be7), Свинец-210 (Pb210), Цезий-134 (Cs134), Цезий-137 (Cs137) и Йод-131 (I131).
+
+## Цель работы.
+
+  Целью данной работы было изучение влияния катастрофы на АЭС Фукусима-1 в марте 2011 года на концентрацию радиоактивных элементов в воздухе Канады.
+
+## Анализ результатов. 
+
+  Ниже представлены графики зависимости концентрации вышеуказанных радионуклидов в воздухе от времени. Кроме того, на всех графиках красным пунктиром указана дата катастрофы на АЭС Фукусима-1.
+  
+```{r, echo = F, warning = F, message = F}
+
+radio <- read.csv(params$filename, stringsAsFactors = F, check.names = F)
+
+#Так как, в исходных данных, названия столбцов написаны на английском и французском языках, уберем часть на французском:
+engnames <- function(s){
+  sapply(strsplit(s, split='[/]',  fixed=FALSE), function(x) x[1])
+}
+names(radio) <- gsub(" ", "", engnames(names(radio)), fixed = T)
+
+radio$CollectionStart <- as.Date(radio$CollectionStart)
+
+mytheme <- theme(axis.text.x = element_text(angle = 60, hjust = 1), legend.position = "bottom", axis.title.x = element_text(size = 13))
+
+#Чтобы части данных, между которыми есть промежуток времени без измерений, не соединялись прямой линией, разделим их на отдельные группы. 
+# Острожно, сложная логика! :)
+
+idx <- c(7, diff(radio$CollectionStart))
+i2 <- c(1,which(idx > 20), nrow(radio) + 1)
+radio$grp <- rep(1:length(diff(i2)), diff(i2))
+
+
+plot <- ggplot(subset(radio, Location == "Churchill"),aes(x = CollectionStart)) +
+  ggtitle("Алерт: количество радиоактивных нуклидов в воздухе") + 
+  geom_line(aes(y = `7BeActivity`,  col = "coral3", group = grp), 
+            size = 0.5) +
+  geom_line(aes(y = `210PbActivity`, col = "lightblue", group = grp),
+            size = 0.5) +
+  geom_line(aes(y = `134CsActivity`, col = "forestgreen", group = grp),
+            size = 0.7) +
+  geom_line(aes(y = `137CsActivity`, col = "red", group = grp),
+            size = 0.7, alpha = 0.7) +
+  geom_line(aes(y = `131IActivity`, col = "midnightblue", group = grp),
+            size = 1.3, alpha = 0.7) +
+  geom_vline(xintercept =  as.numeric(as.Date("2011-03-11")),
+             col = "red", linetype="dotted", size = 1) +
+  scale_x_date(name = "Дата", date_labels = "%B %Y", date_breaks = "3 month", limits = c(min(radio$CollectionStart), max(radio$CollectionStart))) + 
+  scale_y_log10(name = expression(paste("Концентрация (мБк/", м^{3}, ")")), 
+                limits = c(0.001, 100),
+                breaks = c(0.001, 0.01, 0.1, 1, 10, 100),
+                labels = c(0.001, 0.01, 0.1, 1, 10, 100))  +
+  scale_colour_discrete(name = "", 
+                         labels=c("Be7", "Pb210", "I131", "Cs137", "Cs134")) +
+  mytheme
+
+
+#Отфильтруем данные: уберем две платформы с малым количеством замеров.
+radio <- radio %>% 
+  filter(!(Location %in% c("Alert_EnvCan", "St. Johns")))
+
+
+#Ну и построим графики.
+ for (i in unique(radio$Location)){
+   print(plot %+% radio[ radio$Location == i, ] %+% ggtitle(paste(i,": количество радиоактивных нуклидов в воздухе")))
+ }
+```
+
+  Анализ графиков показывает, что на всех станциях наблюдается небольшое увеличение концентрации Cs134, Cs137 и I131 в промежуток времени между мартом и маем 2011 года. Это явление можно связать с катастрофой на атомной электростанции Фукусима-1, произошедшей 11 марта 2011 года. Важно отметить, что несмотря на увеличение количества радиоактивных элементов в воздухе, их концентрация остаётся в пределах нормы.
+
+
